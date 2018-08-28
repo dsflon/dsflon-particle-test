@@ -1,0 +1,356 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+
+	<title>Video Particles | sample</title>
+	<link href="./css/common.css" rel="stylesheet">
+	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+
+	<style>
+		body { background: #000; }
+		canvas { background: url(images/bg9.jpg) no-repeat center; background-size: cover;}
+		#fileWrap { bottom: 50px; left: 50px; width: 60px; height: 60px; background-size: 30px auto; }
+		label { color: #FFF; }
+		.num { width: 50px; border: none; padding: 3px; background: rgba(255, 255, 255, 0.6); }
+		#sizeWrap { position: fixed; bottom: 35px; left: 100px; }
+		#particlesWrap { position: fixed; bottom: 35px; left: 200px; }
+		#mute {
+			position: fixed;
+			color: #FFF;
+			bottom: 40px; left: 100px;
+			cursor: pointer;
+			font-size: 16px;
+			opacity: 0.2;
+		}
+		#mute.mute{
+			opacity: 1;
+		}
+		#nav { position: fixed; top: 20px; right: 25px; color: #FFF; }
+		#nav a { color: #FFF; }
+	</style>
+	<?php include($_SERVER['DOCUMENT_ROOT'].'/audio/common/includes/code.html');?>
+</head>
+<body>
+
+	<div id="nav">
+		<a href="./text2.html">text</a>　|　
+		<a href="./photo3.html">photo</a>　|　
+		<a href="./video3.html">video</a>　|　
+		<a href="./media3.html">web camera</a>
+	</div>
+	<p id="mute">mute</p>
+	<label id="fileWrap"><input id="file" type="file" multiple></label>
+	<!-- <label id="sizeWrap">Size <input class="num" id="size" type="number" value="15"></label> -->
+	<!-- <label id="particlesWrap">Particles <input class="num" id="particles" type="number" value="120"></label> -->
+	<video autoplay loop style="display:none;"></video>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/95/three.js"></script>
+	<script src="./js/tween.min.js"></script>
+
+	<script>
+var animateFrame;
+
+	SRC = "video/movie3.mp4";
+	var NUM = 12, AMOUNT = 210;
+	var SEPARATION = NUM-1, SIZE = NUM, AMOUNTX = AMOUNT, AMOUNTY = AMOUNT;
+	var ASPECT, COUNT;
+
+	var WIDTH = window.innerWidth;
+	var HEIGHT = window.innerHeight;
+	var videoWidth;
+	var videoHeight;
+
+	var container;
+	var camera,
+		scene,
+		renderer,
+		particles,
+		material,
+		Points,
+		group,
+		texture = new THREE.TextureLoader();
+
+	var video, canvas, context;
+
+	var windowHalfX = window.innerWidth / 2,
+	    windowHalfY = window.innerHeight / 2;
+	var mouseX = 0, mouseY = 0;
+
+	var defaultX = [], defaultY = [];
+	var mouseOver = false;
+	var endFlag = false;
+
+	window.onload = userMedia;
+	function userMedia() {
+
+		video = document.querySelector('video');
+		mute = document.getElementById('mute');
+
+		video.src = SRC;
+		video.volume = 0.1;
+
+		video.addEventListener("loadedmetadata",function (e){
+			videoWidth = video.videoWidth;
+			videoHeight = video.videoHeight;
+			ASPECT = (videoWidth / videoHeight).toFixed(1);
+			COUNT = (AMOUNT * (AMOUNT/ASPECT)) + 51;
+
+			init();
+			animate();
+			inputChange();
+		});
+
+		mute.addEventListener("click",function (e){
+			if(video.volume == 0) {
+				video.volume = 0.1;
+				this.className = "";
+			} else {
+				video.volume = 0;
+				this.className = "mute";
+			}
+		});
+
+	}
+
+	function inputChange() {
+		var upload = document.getElementById("file");
+		upload.addEventListener('change', function(e){
+
+			var files = e.target.files[0];
+			var fileReader = new FileReader;
+			container.removeChild(container.childNodes.item(0));
+
+			fileReader.onload = function(e){
+				video.src = e.target.result;
+				videoWidth = video.videoWidth;
+				videoHeight = video.videoHeight;
+				ASPECT = (videoWidth / videoHeight).toFixed(1);
+			};
+			fileReader.readAsDataURL(files);
+
+		});
+	}
+
+	function init() {
+
+		container = document.createElement( 'div' );
+		document.body.appendChild( container );
+
+		scene = new THREE.Scene();
+
+		var fov    = 75;
+		var aspect = WIDTH / HEIGHT;
+		var near   = 1;
+		var far    = 10000;
+		camera = new THREE.PerspectiveCamera( fov, aspect, near, far );
+		camera.position.set( 0, 0, 1200 );
+		camera.up.set( 0, 0, 0 );
+		camera.lookAt({ x:0, y:0, z:0 });
+
+		// パーティクルの数
+		particles = new THREE.Geometry();
+
+		// テクスチャの設定
+		var textureImg = texture.load('images/circle.png');
+
+		group = new THREE.Group();
+
+		// マテリアルの設定
+		material = new THREE.PointsMaterial({
+			size: SIZE,
+			blending: THREE.AdditiveBlending,
+			map: textureImg,
+			transparent: true,
+			vertexColors: THREE.VertexColors
+		});
+
+		context = createMedia();
+		var data = context.getImageData(0, 0, AMOUNT, AMOUNT).data;
+
+		var i = 0;
+		for ( var ix = 0; ix < AMOUNTX; ix ++ ) {
+			for ( var iy = 0; iy < AMOUNTY; iy ++ ) {
+
+				if (i < COUNT) {
+					var red = data[(i * 4) + 0];
+					var green = data[(i * 4 )+ 1];
+					var blue = data[(i * 4) + 2];
+					var alpha = data[(i * 4) + 4];
+
+					var px = (ix - AMOUNTX / 2) * (SEPARATION + 1);
+						py = (AMOUNTY - iy - AMOUNTY / 2) * (SEPARATION + 1),
+						pz = 0;
+					particle = new THREE.Vector3( px, py, pz );
+
+					var style = "rgb("+ red +", "+ green +", "+ blue +")";
+					color = new THREE.Color( style );
+
+					particles.vertices.push( particle );
+					particles.colors.push( color );
+
+					defaultX.push( px );
+					defaultY.push( py );
+
+					i++;
+				}
+
+			}
+		}
+
+		Points = new THREE.Points( particles, material );
+
+		// パーティクルの深さを毎フレームソート
+		Points.sortParticles = true;
+
+		group.add( Points );
+		scene.add( group );
+
+		group.scale.y = -1;
+		group.rotation.z = -Math.PI/2;
+		group.position.y = -(SEPARATION+SIZE)*AMOUNTY/9;
+
+		renderer = new THREE.WebGLRenderer( {
+			antialias:true,
+			alpha: true
+		} );
+		renderer.setSize( window.innerWidth, window.innerHeight );
+		renderer.setClearColor("#000000", 0.95);
+		container.appendChild( renderer.domElement );
+
+		window.addEventListener( 'resize', onWindowResize, false );
+		renderer.domElement.addEventListener( 'touchmove', onDocumentTouchMove, false );
+		renderer.domElement.addEventListener( 'touchstart', onDocumentTouchStart, false );
+		renderer.domElement.addEventListener( 'touchend', onDocumentTouchEnd, false );
+		document.addEventListener( 'mousemove', onDocumentMouseMove, false );
+		document.addEventListener( 'mouseout', onDocumentMouseOut, false );
+
+	}
+	function onWindowResize() {
+
+		windowHalfX = window.innerWidth / 2;
+		windowHalfY = window.innerHeight / 2;
+
+		camera.aspect = window.innerWidth / window.innerHeight;
+		camera.updateProjectionMatrix();
+
+		renderer.setSize( window.innerWidth, window.innerHeight );
+
+	}
+
+	function onDocumentTouchMove( event ) {
+
+		if ( event.touches.length == 1 ) {
+			event.preventDefault();
+			mouseX = event.touches[ 0 ].pageX - windowHalfX;
+			mouseY = event.touches[ 0 ].pageY - windowHalfY;
+		}
+
+	}
+	function onDocumentTouchStart( event ) {
+		if ( event.touches.length == 1 ) {
+			event.preventDefault();
+			mouseX = event.touches[ 0 ].pageX - windowHalfX;
+			mouseY = event.touches[ 0 ].pageY - windowHalfY;
+		}
+		mouseOver = true;
+		endFlag = false;
+	}
+	function onDocumentTouchEnd( event ) {
+		mouseOver = false;
+		endFlag = true;
+		mouseX = 0;
+		mouseY = 0;
+	}
+
+	function onDocumentMouseMove( event ) {
+		mouseX = event.clientX - windowHalfX;
+		mouseY = event.clientY - windowHalfY;
+		mouseOver = true;
+	}
+	function onDocumentMouseOut( event ) {
+		mouseOver = false;
+		endFlag = true;
+		mouseX = 0;
+		mouseY = 0;
+	}
+
+	function animate() {
+		animateFrame = requestAnimationFrame( animate );
+
+		var fix = 2000/window.innerHeight;
+		var MOUSEX = mouseY*fix+(-(SEPARATION+SIZE)*AMOUNTY/9);
+		var MOUSEY = -mouseX*fix;
+
+		camera.position.x += ( (mouseX) - camera.position.x ) * 0.05;
+		camera.position.y += ( (-mouseY) - camera.position.y ) * 0.05;
+
+		context = createMedia();
+		var data = context.getImageData(0, 0, AMOUNT, AMOUNT).data;
+
+		var i = 0;
+		for ( var ix = 0; ix < AMOUNTX; ix ++ ) {
+			for ( var iy = 0; iy < AMOUNTY; iy ++ ) {
+				if (i < COUNT) {
+					var colors = particles.colors[ i ];
+					var particle = particles.vertices[ i ];
+
+					var red = data[(i * 4) + 0];
+					var green = data[(i * 4 )+ 1];
+					var blue = data[(i * 4) + 2];
+					var alpha = data[(i * 4) + 4];
+					var style = "rgb("+ red +", "+ green +", "+ blue +")";
+
+					colors.r = red/255;
+					colors.g = green/255;
+					colors.b = blue/255;
+
+					var angle = Math.atan2(particle.y - (MOUSEY), particle.x - (MOUSEX));
+					var para = 0.995;
+					var pie = 1000;
+					var d = Math.sqrt(Math.pow((particle.x - (MOUSEX)),2) + Math.pow((particle.y - (MOUSEY)),2));
+					var distant = Math.sqrt(Math.pow((particle.x - defaultX[i]),2) + Math.pow((particle.y - defaultY[i]),2));
+
+					if(mouseOver) {
+						particle.x += Math.cos(angle)*pie*Math.pow(para,d);
+						particle.y += Math.sin(angle)*pie*Math.pow(para,d);
+						particle.z += Math.tan(angle)*pie/15;
+						particle.x -= (particle.x - defaultX[i])*distant*0.001;
+						particle.y -= (particle.y - defaultY[i])*distant*0.001;
+						particle.z -= (particle.z)*distant*0.002;
+					}
+
+					if(endFlag) {
+						particle.x -= (particle.x - defaultX[i])*distant*0.001;
+						particle.y -= (particle.y - defaultY[i])*distant*0.001;
+						particle.z -= (particle.z)*distant*0.002;
+					}
+
+					i++;
+				}
+			}
+		}
+
+		// 頂点変更処理
+		Points.geometry.verticesNeedUpdate = true;
+		Points.geometry.colorsNeedUpdate = true;
+
+		render();
+	}
+	function render() {
+		camera.lookAt( scene.position );
+		renderer.render( scene, camera );
+	}
+
+	function createMedia() {
+		canvas = document.createElement('canvas');
+		canvas.width = WIDTH;
+		canvas.height = HEIGHT;
+		context = canvas.getContext("2d");
+		context.drawImage(video, 0, 0, videoWidth, videoHeight, 0, 0, AMOUNT, AMOUNT/ASPECT);
+		return context;
+	}
+
+	</script>
+</body>
+</html>

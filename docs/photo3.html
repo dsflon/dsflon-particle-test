@@ -1,0 +1,310 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+
+	<title>Image Particles | sample</title>
+	<link href="./css/common.css" rel="stylesheet">
+	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+
+	<style>
+		body { background: #000; }
+		/*canvas { cursor: pointer; }*/
+		#fileWrap { bottom: 50px; left: 50px; width: 60px; height: 60px; background-size: 30px auto; }
+		label { color: #FFF; }
+		.num { width: 50px; border: none; padding: 3px; background: rgba(255, 255, 255, 0.6); }
+		#sizeWrap { position: fixed; bottom: 35px; left: 100px; }
+		#particlesWrap { position: fixed; bottom: 35px; left: 200px; }
+		#nav { position: fixed; top: 20px; right: 25px; color: #FFF; }
+		#nav a { color: #FFF; }
+	</style>
+	<?php include($_SERVER['DOCUMENT_ROOT'].'/audio/common/includes/code.html');?>
+</head>
+<body>
+
+	<div id="nav">
+		<a href="./text2.html">text</a>　|　
+		<a href="./photo3.html">photo</a>　|　
+		<a href="./video3.html">video</a>　|　
+		<a href="./media3.html">web camera</a>
+	</div>
+
+	<label id="fileWrap"><input id="file" type="file" multiple></label>
+
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/95/three.js"></script>
+	<script src="./js/tween.min.js"></script>
+
+	<script>
+	var img = new Image();
+	img.src = 'images/bg11.jpg';
+
+	var NUM = 12, AMOUNT = 200;
+	var SEPARATION = NUM, SIZE = NUM, AMOUNTX = AMOUNT, AMOUNTY = AMOUNT;
+
+	var WIDTH = window.innerWidth;
+	var HEIGHT = window.innerHeight;
+
+	var container;
+	var camera,
+		scene,
+		renderer,
+		particles,
+		material,
+		Points,
+		group,
+		texture = new THREE.TextureLoader();
+
+	var windowHalfX = window.innerWidth / 2,
+	    windowHalfY = window.innerHeight / 2;
+	var mouseX = 0, mouseY = 0;
+
+	var defaultX = [], defaultY = [];
+	var mouseOver = false;
+	var endFlag = false;
+
+	img.onload = function(){
+		init();
+		animate();
+
+		inputChange();
+	}
+
+	function inputChange() {
+	    var upload = document.getElementById("file");
+
+	    upload.addEventListener('change', function(e){
+			container.removeChild(container.childNodes.item(0));
+	        cancelAnimationFrame(animateFrame);
+
+			var files = e.target.files[0];
+			if (! files.type.match('image.*')) {
+				return;
+			}
+			var fileReader = new FileReader;
+
+			fileReader.onload = function(e){
+				img = new Image();
+				img.src = e.target.result;
+				img.onload = function(){
+				    init();
+				    animate();
+				}
+			};
+			fileReader.readAsDataURL(files);
+
+	    });
+	}
+
+	function init() {
+
+		container = document.createElement( 'div' );
+		document.body.appendChild( container );
+
+		scene = new THREE.Scene();
+
+		// fog設定 カラーとフォグの濃さ
+		// scene.fog = new THREE.FogExp2( 0xFFFFFF, 0.001 );
+
+		var fov    = 75;
+		var aspect = WIDTH / HEIGHT;
+		var near   = 1;
+		var far    = 10000;
+		camera = new THREE.PerspectiveCamera( fov, aspect, near, far );
+		// camera.position.z = 500;
+		//軸オブジェクト位置座標
+		camera.position.set( 0, 0, 1200 );
+		//カメラ上ベクトルの設定
+		camera.up.set( 0, 0, 0 );
+		//カメラの中心位置ベクトルの設定
+		camera.lookAt({ x:0, y:0, z:0 });
+
+		// パーティクルの数
+		particles = new THREE.Geometry();
+
+		// テクスチャの設定
+		var textureImg = texture.load('images/circle.png');
+		var context = createImg();
+		var data = context.getImageData(0, 0, AMOUNTX, AMOUNTY).data;
+
+		group = new THREE.Group();
+
+		// マテリアルの設定
+		material = new THREE.PointsMaterial({
+			// color: 0xe94e2b,
+			size: SIZE,
+			blending: THREE.AdditiveBlending,
+			map: textureImg,
+			transparent: true,
+			vertexColors: true
+		});
+
+		var i = 0;
+		for ( var ix = 0; ix < AMOUNTX; ix ++ ) {
+			for ( var iy = 0; iy < AMOUNTY; iy ++ ) {
+				var red = data[(i * 4) + 0];
+				var green = data[(i * 4 )+ 1];
+				var blue = data[(i * 4) + 2];
+				var alpha = data[(i * 4) + 4];
+
+				var style = "rgb("+ red +", "+ green +", "+ blue +")";
+
+				var px = ix * SEPARATION - ( ( AMOUNTX * SEPARATION ) / 2 );
+					py = iy * SEPARATION - ( ( AMOUNTY * SEPARATION ) / 2 ),
+					pz = 0;
+				particle = new THREE.Vector3( px, py, pz);
+
+				particles.vertices.push( particle );
+
+				var color = new THREE.Color( style );
+				particles.colors.push( color );
+
+				defaultX.push( px );
+				defaultY.push( py );
+
+				i++;
+			}
+		}
+
+		Points = new THREE.Points( particles, material );
+
+		// パーティクルの深さを毎フレームソート
+		Points.sortParticles = true;
+
+		group.add( Points );
+		scene.add( group );
+
+		group.rotation.z = -Math.PI/2;
+		group.position.y = -(SEPARATION+SIZE)*AMOUNTY/13;
+
+		renderer = new THREE.WebGLRenderer( {
+			antialias:true,
+			// alpha: true
+		} );
+		renderer.setSize( window.innerWidth, window.innerHeight );
+		renderer.setClearColor("#000000", 1);
+		container.appendChild( renderer.domElement );
+
+		window.addEventListener( 'resize', onWindowResize, false );
+		renderer.domElement.addEventListener( 'touchmove', onDocumentTouchMove, false );
+		renderer.domElement.addEventListener( 'touchstart', onDocumentTouchStart, false );
+		renderer.domElement.addEventListener( 'touchend', onDocumentTouchEnd, false );
+		document.addEventListener( 'mousemove', onDocumentMouseMove, false );
+		document.addEventListener( 'mouseout', onDocumentMouseOut, false );
+
+	}
+	function onWindowResize() {
+
+		windowHalfX = window.innerWidth / 2;
+		windowHalfY = window.innerHeight / 2;
+
+		camera.aspect = window.innerWidth / window.innerHeight;
+		camera.updateProjectionMatrix();
+
+		renderer.setSize( window.innerWidth, window.innerHeight );
+
+	}
+
+	function onDocumentTouchMove( event ) {
+
+		if ( event.touches.length == 1 ) {
+			event.preventDefault();
+			mouseX = event.touches[ 0 ].pageX - windowHalfX;
+			mouseY = event.touches[ 0 ].pageY - windowHalfY;
+		}
+
+	}
+	function onDocumentTouchStart( event ) {
+		if ( event.touches.length == 1 ) {
+			event.preventDefault();
+			mouseX = event.touches[ 0 ].pageX - windowHalfX;
+			mouseY = event.touches[ 0 ].pageY - windowHalfY;
+		}
+		mouseOver = true;
+		endFlag = false;
+	}
+	function onDocumentTouchEnd( event ) {
+		mouseOver = false;
+		endFlag = true;
+		mouseX = 0;
+		mouseY = 0;
+	}
+
+	function onDocumentMouseMove( event ) {
+		mouseX = event.clientX - windowHalfX;
+		mouseY = event.clientY - windowHalfY;
+		mouseOver = true;
+	}
+	function onDocumentMouseOut( event ) {
+		mouseOver = false;
+		endFlag = true;
+		mouseX = 0;
+		mouseY = 0;
+	}
+
+
+	function animate() {
+		animateFrame = requestAnimationFrame( animate );
+
+		var fix = 2200/window.innerHeight;
+		var MOUSEX = (mouseY*fix)+(-(SEPARATION+SIZE)*AMOUNTY/14);
+		var MOUSEY = mouseX*fix;
+
+		camera.position.x += ( (mouseX) - camera.position.x ) * 0.05;
+		camera.position.y += ( (-mouseY) - camera.position.y ) * 0.05;
+
+		var i = 0;
+		for ( var ix = 0; ix < AMOUNTX; ix ++ ) {
+			for ( var iy = 0; iy < AMOUNTY; iy ++ ) {
+				var particle = particles.vertices[ i ];
+
+				var angle = Math.atan2(particle.y - (MOUSEY), particle.x - (MOUSEX));
+				var para = 0.995;
+				var pie = 1000;
+				var d = Math.sqrt(Math.pow((particle.x - (MOUSEX)),2) + Math.pow((particle.y - (MOUSEY)),2));
+				var distant = Math.sqrt(Math.pow((particle.x - defaultX[i]),2) + Math.pow((particle.y - defaultY[i]),2));
+
+				if(mouseOver) {
+					particle.x += Math.cos(angle)*pie*Math.pow(para,d);
+					particle.y += Math.sin(angle)*pie*Math.pow(para,d);
+					particle.z += Math.tan(angle)*pie/15;
+					particle.x -= (particle.x - defaultX[i])*distant*0.001;
+					particle.y -= (particle.y - defaultY[i])*distant*0.001;
+					particle.z -= (particle.z)*distant*0.002;
+				}
+
+				if(endFlag) {
+					particle.x -= (particle.x - defaultX[i])*distant*0.001;
+					particle.y -= (particle.y - defaultY[i])*distant*0.001;
+					particle.z -= (particle.z)*distant*0.002;
+				}
+
+				i++;
+			}
+		}
+
+		// 頂点変更処理
+		Points.geometry.verticesNeedUpdate = true;
+
+		render();
+	}
+	function render() {
+		camera.lookAt( scene.position );
+		renderer.render( scene, camera );
+	}
+
+	function createImg() {
+		var canvas = document.createElement('canvas');
+		canvas.width = WIDTH;
+		canvas.height = HEIGHT;
+		var context = canvas.getContext("2d");
+		var imgWidth = img.width;
+		var imgHeight = img.height;
+		var aspect = imgWidth / imgHeight;
+		context.drawImage(img, 0, 0, imgWidth, imgHeight, 0, 0, AMOUNT, AMOUNT/aspect);
+		return context;
+	}
+
+	</script>
+</body>
+</html>
